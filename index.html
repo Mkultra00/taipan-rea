@@ -82,7 +82,10 @@ function readLine(label) {
     return v + "\n";
   }
   if (window.__HEADLESS) return null;  // automation: feed exhausted -> EOF, never prompt
-  const v = window.prompt("Taipan!  —  " + (label || "enter your input") + ":", "");
+  // carry the live question into the dialog: last 4 real lines, spaces collapsed
+  const qlines = screenBuf.split("\n").map(l => l.trim().replace(/ {2,}/g, " ")).filter(Boolean).slice(-4);
+  const q = (qlines.join("  ") || "enter your input").slice(-200);
+  const v = window.prompt("Taipan!  —  " + q, "");
   if (v === null) return null;  // Cancel/Esc -> EOF -> engine exits gracefully
   return v + "\n";  // empty OK -> empty line -> engine re-prompts (no EOF)
 }
@@ -100,8 +103,8 @@ function readLine(label) {
       window.__FEED = feedTxt.split(/\r?\n/).filter((s) => s.length);
       out("(automation: " + window.__FEED.length + " scripted inputs)\n");
     }
-    py.setStdout({ batched: (s) => out(s) });
-    py.setStderr({ batched: (s) => out(s) });
+    py.setStdout({ batched: (s) => out(s + "\n") });  // batched strips \n per line — re-add
+    py.setStderr({ batched: (s) => out(s + "\n") });
     py.setStdin({ stdin: () => readLine("input") });
     await py.runPythonAsync(src);
     out("\n- session ended -\n");
