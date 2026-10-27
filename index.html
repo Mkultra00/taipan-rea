@@ -83,8 +83,8 @@ function readLine(label) {
   }
   if (window.__HEADLESS) return null;  // automation: feed exhausted -> EOF, never prompt
   const v = window.prompt("Taipan!  —  " + (label || "enter your input") + ":", "");
-  if (v === null || v === "") return null;  // treat as EOF
-  return v + "\n";
+  if (v === null) return null;  // Cancel/Esc -> EOF -> engine exits gracefully
+  return v + "\n";  // empty OK -> empty line -> engine re-prompts (no EOF)
 }
 
 (async () => {
