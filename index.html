@@ -82,9 +82,12 @@ function readLine(label) {
     return v + "\n";
   }
   if (window.__HEADLESS) return null;  // automation: feed exhausted -> EOF, never prompt
-  // carry the live question into the dialog: last 4 real lines, spaces collapsed
-  const qlines = screenBuf.split("\n").map(l => l.trim().replace(/ {2,}/g, " ")).filter(Boolean).slice(-4);
-  const q = (qlines.join("  ") || "enter your input").slice(-200);
+  // carry the live question into the dialog: strip art, keep real words
+  const clean = screenBuf.split("\n")
+    .map(l => l.trim().replace(/ {2,}/g, " ").replace(/[^A-Za-z0-9?,.:'()@ ]+/g, ""))
+    .filter(l => l.replace(/[^A-Za-z0-9]/g, "").length >= 6)  // needs surviving words
+    .slice(-4);
+  const q = (clean.join("  ") || "Press ANY key to start — then follow the prompts").slice(-200);
   const v = window.prompt("Taipan!  —  " + q, "");
   if (v === null) return null;  // Cancel/Esc -> EOF -> engine exits gracefully
   return v + "\n";  // empty OK -> empty line -> engine re-prompts (no EOF)
