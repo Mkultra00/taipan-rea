@@ -1,0 +1,93 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TAIPAN! 1982 — deterministic web port</title>
+<style>
+  :root { color-scheme: dark; }
+  html, body { margin: 0; padding: 0; background: #05140a; color: #7dfa94; }
+  header {
+    padding: 10px 14px; font: bold 13px/1.4 "SF Mono", Menlo, monospace;
+    color: #7dfa94; border-bottom: 1px solid #14401f;
+    background: #071a0d; letter-spacing: 1px;
+  }
+  header .dim { color: #3d9b5a; font-weight: normal; }
+  pre#term {
+    margin: 0; padding: 12px 14px 40vh 14px;
+    font: 12.5px/1.32 "SF Mono", Menlo, Consolas, monospace;
+    white-space: pre-wrap; word-break: break-all;
+  }
+  #loadbox {
+    position: fixed; left: 0; right: 0; bottom: 0;
+    padding: 8px 14px; background: #041008; border-top: 1px solid #14401f;
+    font: 12px "SF Mono", Menlo, monospace; color: #3d9b5a;
+  }
+</style>
+</head>
+<body>
+<header>TAIPAN! &middot; 1982 &middot; deterministic &middot; zero inference &middot; <span class="dim">pure Python engine, vendored runtime &middot; no network calls, no keys</span></header>
+<pre id="term">booting engine, one moment…</pre>
+<div id="loadbox">Game prompts open as browser dialogs — type your answer and press OK.</div>
+
+<script src="./pyodide/pyodide.js"></script>
+<script>
+// ---- screen / output plumbing -------------------------------------------------
+// NOTE: Pyodide 0.26.4 raw/write stdout modes fail on partial writes + flush
+// (OSError 29) in the Chrome sandbox; batched mode passes the full scripted
+// game test, so batched is the wiring used here. Partials coalesce line-wise.
+const term = document.getElementById("term");
+let screenBuf = "";
+function out(s) {
+  if (!s) return;
+  screenBuf += s;
+  term.textContent = screenBuf;
+  // cheap polling hooks for automation: last 500 chars + buffer size as a string
+  window.__TERM_TAIL = screenBuf.slice(-500);
+  window.__TERM_LEN = "" + screenBuf.length;
+  window.scrollTo(0, document.body.scrollHeight);
+}
+
+// ---- scripted input support (automation/testing only; humans get dialogs) -----
+// Feed file: set window.__FEED to an array of strings BEFORE the engine reads
+// input; each readline() consumes one entry. Used by the deterministic
+// verification harness; empty/absent feed falls through to window.prompt().
+let feedIdx = 0;
+function readLine(label) {
+  if (window.__FEED && feedIdx < window.__FEED.length) {
+    const v = window.__FEED[feedIdx++];
+    out("» " + v + "\n");
+    return v + "\n";
+  }
+  if (window.__HEADLESS) return null;  // automation: feed exhausted -> EOF, never prompt
+  const v = window.prompt("Taipan!  —  " + (label || "enter your input") + ":", "");
+  if (v === null || v === "") return null;  // treat as EOF
+  return v + "\n";
+}
+
+(async () => {
+  try {
+    const py = await loadPyodide({ indexURL: "./pyodide/" });
+    out("engine loaded, starting taipan.py…\n");
+    const src = await (await fetch("./taipan.py")).text();
+    // automation lane: ?headless=1&feed=FILE -> scripted inputs, EOF at exhaustion
+    const q = new URLSearchParams(location.search);
+    if (q.get("headless")) window.__HEADLESS = true;
+    if (q.get("feed")) {
+      const feedTxt = await (await fetch("./" + q.get("feed"))).text();
+      window.__FEED = feedTxt.split(/\r?\n/).filter((s) => s.length);
+      out("(automation: " + window.__FEED.length + " scripted inputs)\n");
+    }
+    py.setStdout({ batched: (s) => out(s) });
+    py.setStderr({ batched: (s) => out(s) });
+    py.setStdin({ stdin: () => readLine("input") });
+    await py.runPythonAsync(src);
+    out("\n- session ended -\n");
+  } catch (e) {
+    out("\n[python exception] " + (e && (e.type || e.constructor.name)) + ": " + (e && e.message ? e.message : e) + "\n");
+    console.error(e);
+  }
+})();
+</script>
+</body>
+</html>
